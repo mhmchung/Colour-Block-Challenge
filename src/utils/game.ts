@@ -2,12 +2,21 @@ export function levelToSpec(level: number) {
   // Grid scaling: 2x2 up to 8x8, increases every 4 levels
   const grid = Math.min(2 + Math.floor((level - 1) / 4), 8);
 
-  // ΔL drops slowly:
-  // Start at 12%, and decrease by 0.2 per level.
-  // 12 -> 2 takes 50 levels (because (12-2)/0.2 = 50).
-  const deltaL = Math.max(12 - (level - 1) * 0.2, 2);
+  /**
+   * Smooth slow decay (exponential):
+   * deltaL = 2 + 10 * exp(-(level-1)/35)
+   *
+   * Examples:
+   * level 1  -> 12.0
+   * level 15 -> ~8.0
+   * level 30 -> ~5.6
+   * level 50 -> ~3.5
+   * level 70 -> ~2.7
+   * (never hits 2 early; it approaches 2 gradually)
+   */
+  const deltaL = 2 + 10 * Math.exp(-(level - 1) / 35);
 
-  return { grid, deltaL: Math.round(deltaL) };
+  return { grid, deltaL };
 }
 
 function clamp(n: number, lo: number, hi: number) {
@@ -21,7 +30,7 @@ export function buildLevelColours(grid: number, deltaL: number) {
   const h = Math.floor(Math.random() * 360);
   const s = 80;
 
-  // keep base lightness away from edges so +/- delta stays in range
+  // Keep base lightness away from edges so +/- delta stays in range
   const baseL = clamp(50 + Math.floor(Math.random() * 11) - 5, 20, 80);
 
   const sign = Math.random() < 0.5 ? -1 : 1;

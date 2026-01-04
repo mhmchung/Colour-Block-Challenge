@@ -1,8 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ColourGrid from "./components/ColourGrid";
-import { buildLevelColours, formatTime, levelToSpec, rankFromScore } from "./utils/game";
+import {
+  buildLevelColours,
+  formatTime,
+  levelToSpec,
+  rankFromScore,
+} from "./utils/game";
 
 type GameState = "idle" | "playing" | "finished";
+
 const PB_KEY = "chromaquest_pb_v1";
 
 export default function App() {
@@ -47,19 +53,19 @@ export default function App() {
     setTimeLeft(30);
     setScore(0);
     setLevel(1);
-    setColours([]); // ✅ ensures NO grid on info page
+    setColours([]); // no grid on briefing page
   };
 
-  // timer
   useEffect(() => {
     if (gameState !== "playing") return;
+
     const id = window.setInterval(() => {
       setTimeLeft((t) => Math.max(0, t - 1));
     }, 1000);
+
     return () => window.clearInterval(id);
   }, [gameState]);
 
-  // end game
   useEffect(() => {
     if (gameState === "playing" && timeLeft === 0) {
       setGameState("finished");
@@ -130,11 +136,25 @@ export default function App() {
         <div className="mt-8 glass shadow-glass rounded-3xl p-6 md:p-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2">
-              <span className="badge">Grid <span className="ml-1 text-white/90">{grid}×{grid}</span></span>
-              <span className="badge">ΔL <span className="ml-1 text-white/90">{deltaL}%</span></span>
-              <span className="badge">Status <span className="ml-1 text-white/90">
-                {gameState === "idle" ? "Briefing" : gameState === "playing" ? "Mission" : "Complete"}
-              </span></span>
+              <span className="badge">
+                Grid <span className="ml-1 text-white/90">{grid}×{grid}</span>
+              </span>
+
+              {/* ✅ show ΔL with decimals so you can see slow reductions */}
+              <span className="badge">
+                ΔL <span className="ml-1 text-white/90">{deltaL.toFixed(1)}%</span>
+              </span>
+
+              <span className="badge">
+                Status{" "}
+                <span className="ml-1 text-white/90">
+                  {gameState === "idle"
+                    ? "Briefing"
+                    : gameState === "playing"
+                    ? "Mission"
+                    : "Complete"}
+                </span>
+              </span>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -170,13 +190,12 @@ export default function App() {
               <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-5">
                 <h2 className="text-xl font-bold">Difficulty curve</h2>
                 <p className="mt-3 text-white/75">
-                  Grid scales from 2×2 to 8×8. Brightness difference (ΔL) shrinks down to 2%.
+                  Grid scales from 2×2 to 8×8. Brightness difference (ΔL) reduces gradually.
                 </p>
               </div>
             </div>
           )}
 
-          {/* ✅ Grid only appears during gameplay */}
           {gameState === "playing" && (
             <div className="mt-8 animate-fadeIn">
               <ColourGrid grid={grid} colours={colours} onPick={onPick} />
