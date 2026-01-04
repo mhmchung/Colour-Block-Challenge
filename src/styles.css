@@ -16,7 +16,7 @@ body {
 }
 
 .glass {
-  @apply bg-white/10 backdrop-blur-xl border border-white/15 shadow-glass;
+  @apply bg-white/10 backdrop-blur-xl border border-white/15 shadow-2xl;
 }
 
 .button {
