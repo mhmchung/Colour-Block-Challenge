@@ -1,6 +1,12 @@
 export function levelToSpec(level: number) {
+  // Grid scaling: 2x2 up to 8x8, increases every 4 levels
   const grid = Math.min(2 + Math.floor((level - 1) / 4), 8);
-  const deltaL = Math.max(12 - level * 0.8, 2);
+
+  // ΔL drops slowly:
+  // Start at 12%, and decrease by 0.2 per level.
+  // 12 -> 2 takes 50 levels (because (12-2)/0.2 = 50).
+  const deltaL = Math.max(12 - (level - 1) * 0.2, 2);
+
   return { grid, deltaL: Math.round(deltaL) };
 }
 
@@ -28,7 +34,6 @@ export function buildLevelColours(grid: number, deltaL: number) {
     i === targetIndex ? target : base
   );
 
-  // ✅ include these so App.tsx can read them
   return { colours, targetIndex, grid, deltaL };
 }
 
