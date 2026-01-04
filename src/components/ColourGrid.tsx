@@ -7,12 +7,24 @@ type Props = {
 };
 
 export default function ColourGrid({ grid, colours, onPick }: Props) {
+  // cap overall grid size so tiles don't become massive
+  // (min(92vw, 720px) works well for 2x2 through 8x8)
+  const gridMaxWidth = "min(92vw, 720px)";
+
   return (
-    <div className="mx-auto w-full max-w-[820px]">
+    <div
+      style={{
+        width: "100%",
+        maxWidth: gridMaxWidth,
+        marginLeft: "auto",
+        marginRight: "auto",
+      }}
+    >
       <div
-        className="grid gap-3 sm:gap-4"
         style={{
+          display: "grid",
           gridTemplateColumns: `repeat(${grid}, minmax(0, 1fr))`,
+          gap: grid <= 3 ? 14 : 10,
         }}
       >
         {colours.map((c, i) => (
@@ -20,14 +32,16 @@ export default function ColourGrid({ grid, colours, onPick }: Props) {
             key={i}
             type="button"
             onClick={() => onPick(i)}
-            className={[
-              "aspect-square rounded-2xl",
-              "ring-1 ring-white/15",
-              "shadow-[0_12px_30px_rgba(0,0,0,0.25)]",
-              "transition-transform active:scale-[0.98]",
-            ].join(" ")}
-            style={{ background: c }}
             aria-label={`Tile ${i + 1}`}
+            style={{
+              background: c,
+              width: "100%",
+              aspectRatio: "1 / 1",
+              borderRadius: 18,
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxShadow: "0 12px 30px rgba(0,0,0,0.25)",
+              cursor: "pointer",
+            }}
           />
         ))}
       </div>
