@@ -1,229 +1,143 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { formatShare, newRound, rankForScore, Round } from './game'
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import ColourGrid from "./components/ColourGrid";
+import {
+  buildLevelColours,
+  formatTime,
+  levelToSpec,
+  rankFromScore,
+} from "./utils/game";
 
-const TOTAL_SECONDS = 30
-const BEST_KEY = "chromaquest:best:v1"
+type GameState = "idle" | "playing" | "finished";
 
-type GameState = "idle" | "running" | "ended"
-
-function pad2(n: number) {
-  return n.toString().padStart(2, "0")
-}
+const PB_KEY = "chromaquest_pb_v1";
 
 export default function App() {
-  const [state, setState] = useState<GameState>("idle")
-  const [secondsLeft, setSecondsLeft] = useState<number>(TOTAL_SECONDS)
-  const [score, setScore] = useState<number>(0)
-  const [best, setBest] = useState<number>(() => {
-    const raw = localStorage.getItem(BEST_KEY)
-    const v = raw ? Number(raw) : 0
-    return Number.isFinite(v) ? v : 0
-  })
+  const [gameState, setGameState] = useState<GameState>("idle");
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [score, setScore] = useState(0);
+  const [level, setLevel] = useState(1);
 
-  const [round, setRound] = useState<Round>(() => newRound(0))
-  const [shake, setShake] = useState(false)
-  const tickRef = useRef<number | null>(null)
+  const [grid, setGrid] = useState(2);
+  const [deltaL, setDeltaL] = useState(12);
+  const [colours, setColours] = useState<string[]>([]);
+  const targetIndexRef = useRef(0);
 
-  const rank = useMemo(() => rankForScore(score), [score])
-  const bestRank = useMemo(() => rankForScore(best), [best])
+  const [pb, setPb] = useState<number>(() => {
+    const v = localStorage.getItem(PB_KEY);
+    return v ? Number(v) : 0;
+  });
 
-  useEffect(() => {
-    if (state !== "running") return
+  const rank = useMemo(() => rankFromScore(score), [score]);
+  const pbRank = useMemo(() => rankFromScore(pb), [pb]);
 
-    const start = Date.now()
-    const endAt = start + TOTAL_SECONDS * 1000
+  /* ---------- Game Logic ---------- */
 
-    const tick = () => {
-      const now = Date.now()
-      const msLeft = Math.max(0, endAt - now)
-      const s = Math.ceil(msLeft / 1000)
-      setSecondsLeft(s)
-
-      if (msLeft <= 0) {
-        setState("ended")
-        return
-      }
-      tickRef.current = window.setTimeout(tick, 120)
-    }
-
-    tick()
-    return () => {
-      if (tickRef.current) window.clearTimeout(tickRef.current)
-      tickRef.current = null
-    }
-  }, [state])
-
-  useEffect(() => {
-    if (state === "ended") {
-      if (score > best) {
-        setBest(score)
-        localStorage.setItem(BEST_KEY, String(score))
-      }
-    }
-  }, [state, score, best])
+  const generateLevel = (lv: number) => {
+    const spec = levelToSpec(lv);
+    const built = buildLevelColours(spec.grid, spec.deltaL);
+    setGrid(built.grid);
+    setDeltaL(built.deltaL);
+    setColours(built.colours);
+    targetIndexRef.current = built.targetIndex;
+  };
 
   const startGame = () => {
-    setScore(0)
-    setSecondsLeft(TOTAL_SECONDS)
-    setRound(newRound(0))
-    setState("running")
-  }
+    setScore(0);
+    setLevel(1);
+    setTimeLeft(30);
+    setGameState("playing");
+    generateLevel(1);
+  };
 
-  const resetToIdle = () => {
-    setState("idle")
-    setScore(0)
-    setSecondsLeft(TOTAL_SECONDS)
-    setRound(newRound(0))
-  }
+  const resetGame = () => {
+    setGameState("idle");
+    setScore(0);
+    setLevel(1);
+    setTimeLeft(30);
+    setColours([]); // 🔑 ensures NO grid on info page
+  };
 
-  const onTileClick = (idx: number) => {
-    if (state !== "running") return
+  /* ---------- Timer ---------- */
 
-    if (idx === round.targetIndex) {
-      const nextScore = score + 1
-      setScore(nextScore)
-      setRound(newRound(nextScore))
-    } else {
-      // No penalty, but give quick feedback so misclicks feel real.
-      setShake(true)
-      window.setTimeout(() => setShake(false), 180)
+  useEffect(() => {
+    if (gameState !== "playing") return;
+
+    const id = setInterval(() => {
+      setTimeLeft((t) => Math.max(0, t - 1));
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [gameState]);
+
+  useEffect(() => {
+    if (gameState === "playing" && timeLeft === 0) {
+      setGameState("finished");
+      setPb((p) => {
+        const next = Math.max(p, score);
+        localStorage.setItem(PB_KEY, String(next));
+        return next;
+      });
     }
-  }
+  }, [timeLeft, gameState, score]);
 
-  const share = async () => {
-    const text = formatShare(score)
-    try {
-      if (navigator.share) {
-        await navigator.share({ text })
-        return
-      }
-    } catch {
-      // ignore
+  const onPick = (index: number) => {
+    if (gameState !== "playing") return;
+    if (index === targetIndexRef.current) {
+      setScore((s) => s + 1);
+      setLevel((lv) => {
+        const next = lv + 1;
+        generateLevel(next);
+        return next;
+      });
     }
-    await navigator.clipboard.writeText(text)
-    alert("Copied results to clipboard.")
-  }
+  };
 
-  const timeDisplay = `${pad2(Math.floor(secondsLeft / 60))}:${pad2(secondsLeft % 60)}`
+  /* ---------- UI ---------- */
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-5">
-      <div className="w-full max-w-3xl glass rounded-3xl p-6 md:p-10">
-        <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="badge">ChromaQuest</span>
-              <span className="badge">30s</span>
-              <span className="badge">{state === "running" ? "Mission Live" : state === "ended" ? "Mission Complete" : "Ready"}</span>
-            </div>
-            <h1 className="mt-4 text-3xl md:text-4xl font-bold tracking-tight">
-              The Color Challenge
-            </h1>
-            <p className="mt-2 text-sm md:text-base text-slate-200/80 max-w-xl">
-              Find the odd one out. One tile is slightly different in brightness. Score as many as you can before time runs out.
-            </p>
-          </div>
+    <div className="min-h-screen bg-[#0b1020] text-white px-5 py-10">
+      <h1 className="text-5xl font-extrabold">The Color Challenge</h1>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="glass rounded-2xl px-4 py-3 border border-white/10">
-              <div className="text-xs text-slate-200/70">Time</div>
-              <div className="text-2xl font-bold tabular-nums">{timeDisplay}</div>
-            </div>
+      <p className="mt-3 text-white/80 max-w-xl">
+        Find the odd one out. One tile is slightly different in brightness.
+        Score as many as you can before time runs out.
+      </p>
 
-            <div className="glass rounded-2xl px-4 py-3 border border-white/10">
-              <div className="text-xs text-slate-200/70">Score</div>
-              <div className="text-2xl font-bold tabular-nums">{score}</div>
-            </div>
-
-            <div className="glass rounded-2xl px-4 py-3 border border-white/10">
-              <div className="text-xs text-slate-200/70">Rank</div>
-              <div className="text-2xl font-bold">{rank}</div>
-            </div>
-          </div>
-        </header>
-
-        <main className="mt-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="badge">Grid: {round.size}×{round.size}</span>
-              <span className="badge">ΔL: {round.deltaL}%</span>
-              <span className="badge">PB: {best} ({bestRank})</span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {state !== "running" ? (
-                <button className="button" onClick={startGame}>
-                  START MISSION
-                </button>
-              ) : (
-                <button className="button" onClick={() => setState("ended")}>
-                  END
-                </button>
-              )}
-
-              {state === "ended" && (
-                <>
-                  <button className="button" onClick={share}>SHARE</button>
-                  <button className="button" onClick={resetToIdle}>RESET</button>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <div
-              className={[
-                "mx-auto",
-                "grid gap-2 md:gap-3",
-                shake ? "animate-[shake_0.18s_linear]" : "",
-              ].join(" ")}
-              style={{
-                gridTemplateColumns: `repeat(${round.size}, minmax(0, 1fr))`,
-              }}
-            >
-              {round.tiles.map((c, i) => (
-                <button
-                  key={i}
-                  className="tile aspect-square w-full"
-                  style={{ background: c }}
-                  onClick={() => onTileClick(i)}
-                  aria-label={i === round.targetIndex ? "Target tile" : "Tile"}
-                />
-              ))}
-            </div>
-          </div>
-
-          {state === "ended" && (
-            <section className="mt-8 glass rounded-3xl p-6 border border-white/10">
-              <h2 className="text-xl font-bold">Mission Summary</h2>
-              <div className="mt-3 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-                <div>
-                  <div className="text-sm text-slate-200/70">Final Score</div>
-                  <div className="text-4xl font-extrabold tabular-nums">{score}</div>
-                  <div className="mt-1 text-sm text-slate-200/80">Rank: <span className="font-semibold">{rank}</span></div>
-                </div>
-                <div className="text-sm text-slate-200/80">
-                  Personal Best: <span className="font-semibold">{best}</span> ({bestRank})
-                </div>
-              </div>
-            </section>
-          )}
-        </main>
-
-        <footer className="mt-10 text-xs text-slate-200/60">
-          Tip: At higher levels, the brightness difference can be as low as 2%. On mobile, try maximum screen brightness.
-        </footer>
+      <div className="mt-6 flex gap-4">
+        <div>Time: {formatTime(timeLeft)}</div>
+        <div>Score: {score}</div>
+        <div>Rank: {rank}</div>
       </div>
 
-      <style>{`
-        @keyframes shake {
-          0% { transform: translateX(0); }
-          25% { transform: translateX(-6px); }
-          50% { transform: translateX(6px); }
-          75% { transform: translateX(-4px); }
-          100% { transform: translateX(0); }
-        }
-      `}</style>
+      <div className="mt-6 flex gap-3">
+        {gameState !== "playing" ? (
+          <button
+            onClick={startGame}
+            className="rounded-xl bg-white/10 px-6 py-3"
+          >
+            START MISSION
+          </button>
+        ) : (
+          <button
+            onClick={resetGame}
+            className="rounded-xl bg-white/10 px-6 py-3"
+          >
+            RESET
+          </button>
+        )}
+      </div>
+
+      {/* 🔥 THIS is the important change */}
+      {gameState === "playing" && (
+        <div className="mt-10 animate-fadeIn">
+          <ColourGrid
+            grid={grid}
+            colours={colours}
+            onPick={onPick}
+          />
+        </div>
+      )}
     </div>
-  )
+  );
 }
+
